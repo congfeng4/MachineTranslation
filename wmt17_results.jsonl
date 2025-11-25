@@ -1,0 +1,1 @@
+{"eval_loss": 1.688937783241272, "eval_bleu": 19.698355824520128, "eval_chrf": 49.92579834109193, "eval_runtime": 38.4393, "eval_samples_per_second": 0.26, "eval_steps_per_second": 0.078, "epoch": 3.0, "src": "cs", "tgt": "en", "num_train": 10, "num_test": 10, "num_val": 1, "reverse": false, "model_name": "mbert"}
