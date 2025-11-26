@@ -1,0 +1,12 @@
+transformers
+datasets 
+sacrebleu 
+sentencepiece 
+accelerate 
+evaluate 
+seaborn 
+pandas 
+matplotlib 
+dotenv 
+jsonlines 
+sacremoses
