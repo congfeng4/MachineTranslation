@@ -56,6 +56,13 @@ model_map = {
     'nllb': 'facebook/nllb-200-distilled-1.3B',
     't5-small': 'google-t5/t5-small',
 }
+# Set the best model parameters here!
+model_params = {
+    'mbart': {'num_train': 2048},
+    'opus-mt': {'num_train': 2048},
+    'nllb': {'num_train': 2048},
+    't5-small': {'num_train': 2048},
+}
 
 # %% [markdown]
 # ## Load Pretrained Model.
@@ -236,25 +243,19 @@ def train_model(model_name: str, src: str, tgt: str, num_train=10, num_test=10, 
 dataset = load_dataset('wmt17', 'zh-en', split='test', cache_dir='./cache')
 
 # %%
-seed_all(111)
+seed_all(111) # Set a seed to 111.
 
 # %%
 len(dataset)
 
 # %%
-num_inputs = 5
+num_inputs = 5 # Fixed to 5.
 
 input_data = dataset.select(random.choices(range(len(dataset)), k=num_inputs))
 len(input_data)
 
 # %%
 input_data
-
-# %%
-model, tok = train_model('opus-mt', src='zh', tgt='en', num_train=32, num_test=20)
-
-# %%
-model.device
 
 # %%
 def get_avail_device():
@@ -303,7 +304,8 @@ translation_results = {'tgt': [sample['translation'][tgt] for sample in input_da
                        'src': [sample['translation'][src] for sample in input_data]}
 
 for key in model_map:
-    model, tok = train_model(key, src='zh', tgt='en', num_train=32, num_test=20)
+    num_train = model_params[key].get("num_train", 32)
+    model, tok = train_model(key, src='zh', tgt='en', num_train=num_train, num_test=20)
     translation_results[key] = translate(model, tok, input_data, src)
 
 # %%
