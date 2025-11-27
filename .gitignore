@@ -3,3 +3,5 @@
 .env
 trainer_output
 /exp
+.ipynb_checkpoints
+.idea
