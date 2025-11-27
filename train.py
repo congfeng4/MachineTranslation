@@ -142,7 +142,6 @@ def clean_memory():
 
 # %%
 def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10, num_test=10, num_val=10):
-    seed_all(seed=seed)
     need_prompt = model_name.startswith('t5')
     data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
 
@@ -252,7 +251,7 @@ def parameter_grid():
                                 num_train=num_train, num_test=num_test, num_val=num_val)
 
 params_list = list(parameter_grid())
-# random.shuffle(params_list)
+random.shuffle(params_list)
 
 
 # %%
