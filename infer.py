@@ -297,6 +297,9 @@ def translate(model, tok, input_data, src='zh'):
     return out_f
 
 
+# %% [markdown]
+# Run each model.
+
 # %%
 tgt, src = 'en', 'zh'
 
@@ -311,5 +314,69 @@ for key in model_map:
 # %%
 df = pd.DataFrame(translation_results)
 df.to_csv('./translation_results.csv', index=False)
+
+# %% [markdown]
+# ## Dimension Reduction & Clustering
+
+# %%
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+import umap
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+model_map = {
+    'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
+    'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
+    'nllb': 'facebook/nllb-200-distilled-1.3B',
+    't5-small': 'google-t5/t5-small',
+}
+
+# 假设你的 DataFrame 长这样：
+# | tgt | pred_modelA | pred_modelB | pred_modelC | ...
+
+# 1. 收集所有句子 + 标签
+sentences, labels, markers = [], [], []   # markers: 'gt' 或模型名
+for idx, row in df.iterrows():
+    sentences.append(row["tgt"])
+    labels.append(f"sample{idx}")
+    markers.append("gt")          # ground-truth
+    for model_name in model_map:
+        sentences.append(row[model_name])
+        labels.append(f"sample{idx}")
+        markers.append(model_name)
+
+# 2. TF-IDF 向量化
+vectorizer = TfidfVectorizer(lowercase=True, stop_words=None, max_features=20_000)
+X = vectorizer.fit_transform(sentences)   # shape: (n_sent, n_features)
+
+# 3. UMAP 降维
+reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, metric="cosine", random_state=42)
+XY = reducer.fit_transform(X)             # shape: (n_sent, 2)
+
+# 4. 画图
+plt.figure(figsize=(8, 6))
+unique_samples = sorted(set(labels))
+palette = sns.color_palette("husl", n_colors=len(unique_samples))
+color_map = {sam: palette[i] for i, sam in enumerate(unique_samples)}
+
+for i, (x, y) in enumerate(XY):
+    color = color_map[labels[i]]
+    if markers[i] == "gt":        # 五角星
+        plt.scatter(x, y, marker="*", s=200, c=[color], edgecolor="black")
+    else:                         # 模型预测
+        plt.scatter(x, y, c=[color], s=60, alpha=0.8)
+        # 在点旁边写模型名（只写一次，防止重叠）
+        plt.text(x+0.5, y, markers[i], fontsize=8, ha="left")
+
+# 图例：颜色 = 样本 ID
+legend_elements = [plt.Line2D([0], [0], marker="o", color="w",
+                              markerfacecolor=color_map[sam], markersize=8, label=sam)
+                   for sam in unique_samples]
+plt.legend(handles=legend_elements, title="Sample ID", bbox_to_anchor=(1.05, 1), loc="upper left")
+plt.savefig('./cluster.jpg')
+plt.title("UMAP projection of TF-IDF vectors (GT ★ vs. model predictions)")
+plt.tight_layout()
+plt.show()
 
 
