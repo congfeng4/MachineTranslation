@@ -53,8 +53,8 @@ lang_map = {
 model_map = {
     'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
     'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-    'nllb': 'facebook/nllb-200-distilled-1.3B',
-    't5-small': 'google-t5/t5-small',
+#    'nllb': 'facebook/nllb-200-distilled-1.3B',
+ #   't5-small': 'google-t5/t5-small',
 }
 
 # %% [markdown]
