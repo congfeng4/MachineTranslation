@@ -53,12 +53,20 @@ lang_map = {
 model_map = {
     'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
     'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
+    'nllb': 'facebook/nllb-200-distilled-1.3B',
+    't5-small': 'google-t5/t5-small',
 }
 
 # %% [markdown]
 # ## Load Pretrained Model.
 # 
-# https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
+# | Model key | HF model id                              | # Params | Arch.                     | Languages             | Pre-train data        | Tokeniser           | Requires prompt prefix?    | Size on disk |
+# | --------- | ---------------------------------------- | -------- | ------------------------- | --------------------- | --------------------- | ------------------- | -------------------------- | ------------ |
+# | mbart     | facebook/mbart-large-50-many-to-many-mmt | 610 M    | Transformer-large (12-12) | 50 langs, any→any     | CC25 + mined data     | SentencePiece 250 k | No (src/tgt codes in call) | ~2.3 GB      |
+# | opus-mt   | Helsinki-NLP/opus-mt-zh-en               | 74 M     | Transformer-base (6-6)    | zh → en only          | OPUS corpus           | SentencePiece 32 k  | No                         | ~298 MB      |
+# | nllb      | facebook/nllb-200-distilled-1.3B         | 1.3 B    | Transformer (12-12, MoE)  | 200 langs, any→any    | NLLB-200 corpus       | SentencePiece 256 k | No                         | ~5 GB        |
+# | t5-small  | google-t5/t5-small                       | 60 M     | Encoder-decoder (6-6)     | any pair in pre-train | C4 + downstream tasks | SentencePiece 32 k  | Yes ("translate X to Y:")  | ~242 MB      |
+# 
 
 # %%
 def build_model(model_name, src_lang, tgt_lang):
@@ -133,9 +141,9 @@ def clean_memory():
     gc.collect()               # 再让 Python 回收一次
 
 # %%
-def train_evaluate(model_name, src, tgt, seed, num_train=10, num_test=10, num_val=10):
+def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10, num_test=10, num_val=10):
     seed_all(seed=seed)
-    
+    need_prompt = model_name.startswith('t5')
     data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
 
     lang_src = lang_map[src]
@@ -160,6 +168,10 @@ def train_evaluate(model_name, src, tgt, seed, num_train=10, num_test=10, num_va
     def encode(ex):
         en_sent = [item[src] for item in ex["translation"]]
         zh_sent = [item[tgt] for item in ex["translation"]]
+        if need_prompt:
+            # T5 is the google model that needs a prompt.
+            en_sent = ["Translate from English to Chinese: " + item for item in en_sent]
+
         # 一次调用同时编码源端和目标端
         model_inputs = tok(
             en_sent,
@@ -173,7 +185,7 @@ def train_evaluate(model_name, src, tgt, seed, num_train=10, num_test=10, num_va
     raw_train, raw_test, raw_val = split_train_test(data,
                                                     num_trains=num_train, num_test=num_test, num_val=num_val)
 
-    # Why we tokenize the split instead of data? Since data is very large and we only use a small part of it!!
+    # Why we tokenize the split instead of data? Since data is very large, and we only use a small part of it!!
     # So 3 times tokenizations is OK.
     tokenised_train = raw_train.map(encode, batched=True)
     tokenised_val = raw_val.map(encode, batched=True)
