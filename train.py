@@ -68,6 +68,30 @@ def build_model(model_name, src_lang, tgt_lang):
     return tok, model
 
 
+# %%
+import random
+import os
+import numpy as np
+import torch
+
+def seed_all(seed: int = 42):
+    # 1. Python builtin
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # 2. NumPy
+    np.random.seed(seed)
+
+    # 3. PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    print(f"[seed_all] Global random seed set to {seed}")
+
 # %% [markdown]
 # ## Load MT Metrics
 
@@ -82,8 +106,7 @@ chrf = load("chrf", cache_dir='./cache')
 # ## Preprocess Datasets
 
 # %%
-def split_train_test(full_train, num_trains, num_test, num_val, seed=42):
-    random.seed(seed)
+def split_train_test(full_train, num_trains, num_test, num_val):
     indices = random.sample(range(len(full_train)), num_trains + num_test + num_val)
     raw_train = full_train.select(indices[:num_trains])
     raw_test = full_train.select(indices[num_trains:num_trains + num_test])
@@ -110,7 +133,9 @@ def clean_memory():
     gc.collect()               # 再让 Python 回收一次
 
 # %%
-def train_evaluate(model_name, src, tgt, num_train=10, num_test=10, num_val=10):
+def train_evaluate(model_name, src, tgt, seed, num_train=10, num_test=10, num_val=10):
+    seed_all(seed=seed)
+    
     data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
 
     lang_src = lang_map[src]
@@ -148,6 +173,8 @@ def train_evaluate(model_name, src, tgt, num_train=10, num_test=10, num_val=10):
     raw_train, raw_test, raw_val = split_train_test(data,
                                                     num_trains=num_train, num_test=num_test, num_val=num_val)
 
+    # Why we tokenize the split instead of data? Since data is very large and we only use a small part of it!!
+    # So 3 times tokenizations is OK.
     tokenised_train = raw_train.map(encode, batched=True)
     tokenised_val = raw_val.map(encode, batched=True)
     tokenised_test = raw_test.map(encode, batched=True)
@@ -204,12 +231,12 @@ def train_evaluate(model_name, src, tgt, num_train=10, num_test=10, num_val=10):
 def parameter_grid():
     lang_pair = 'zh-en'
     for model_name in model_map.keys():
-        for rep in range(3):
+        for seed in [111, 112, 113]:
             src, tgt = lang_pair.split('-')
-            for num_train in [4096, 8192]: #[16, 32, 64, 128, 256, 512, 1024, 2048]:
-                for num_test in [20]:
+            for num_train in [16, 32, 64, 128, 256, 512, 1024, 2048]:
+                for num_test in [20, 200]:
                     num_val = num_train // 2
-                    yield dict(src=src, tgt=tgt, model_name=model_name,
+                    yield dict(src=src, tgt=tgt, model_name=model_name, seed=seed,
                                 num_train=num_train, num_test=num_test, num_val=num_val)
 
 params_list = list(parameter_grid())
