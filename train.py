@@ -206,7 +206,7 @@ def parameter_grid():
     for model_name in model_map.keys():
         for rep in range(3):
             src, tgt = lang_pair.split('-')
-            for num_train in [16, 32, 64, 128, 256, 512, 1024, 2048]:
+            for num_train in [4096, 8192]: #[16, 32, 64, 128, 256, 512, 1024, 2048]:
                 for num_test in [20]:
                     num_val = num_train // 2
                     yield dict(src=src, tgt=tgt, model_name=model_name,
