@@ -1,5 +1,5 @@
 # %% [markdown]
-# # Machine Translation
+# # Machine Translation - Inference
 
 # %% [markdown]
 # Uncomment this if you are using Colab. Please reserve at least 80GB storage.
@@ -51,10 +51,10 @@ lang_map = {
         'tr': 'tr_TR',
     }
 model_map = {
-    #'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
+    'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
     'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-    #'nllb': 'facebook/nllb-200-distilled-1.3B',
-    #'t5-small': 'google-t5/t5-small',
+    'nllb': 'facebook/nllb-200-distilled-1.3B',
+    't5-small': 'google-t5/t5-small',
 }
 
 # %% [markdown]
@@ -141,8 +141,7 @@ def clean_memory():
     gc.collect()               # 再让 Python 回收一次
 
 # %%
-def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10, num_test=10, num_val=10):
-    seed_all(seed=seed)
+def train_model(model_name: str, src: str, tgt: str, num_train=10, num_test=10, num_val=10):
     need_prompt = model_name.startswith('t5')
     data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
 
@@ -182,15 +181,13 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         )
         return model_inputs
 
-    raw_train, raw_test, raw_val = split_train_test(data, num_trains=num_train, num_test=num_test, num_val=num_val)
-
+    raw_train, raw_test, raw_val = split_train_test(data,
+                                                    num_trains=num_train, num_test=num_test, num_val=num_val)
     # Why we tokenize the split instead of data? Since data is very large, and we only use a small part of it!!
     # So 3 times tokenizations is OK.
     tokenised_train = raw_train.map(encode, batched=True)
     tokenised_val = raw_val.map(encode, batched=True)
     tokenised_test = raw_test.map(encode, batched=True)
-    print(tokenised_test)
-    print('dfdf1')
 
     data_coll = DataCollatorForSeq2Seq(tok, model=model)
 
@@ -226,139 +223,91 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
     )
     trainer.train()
-
-    eval_result = trainer.evaluate(tokenised_test)
-    eval_result.update(src=src, tgt=tgt, num_train=num_train, num_test=num_test, num_val=num_val, model_name=model_name)
-
-    writer = jsonlines.open('wmt17_results.jsonl', mode='a')
-    writer.write(eval_result)
-    writer.close()
-    return eval_result
-
+    return model, tok
 
 
 # %% [markdown]
-# ## Run Experiments
+# ## Run Inference
+
+# %% [markdown]
+# Obtain the input setences.
 
 # %%
-def parameter_grid():
-    lang_pair = 'zh-en'
-    for model_name in model_map.keys():
-        for seed in [111, 112, 113]:
-            src, tgt = lang_pair.split('-')
-            for num_train in [16, 32, 64, 128, 256, 512, 1024, 2048]:
-                for num_test in [20, 200]:
-                    num_val = num_train // 2
-                    yield dict(src=src, tgt=tgt, model_name=model_name, seed=seed,
-                                num_train=num_train, num_test=num_test, num_val=num_val)
+dataset = load_dataset('wmt17', 'zh-en', split='test', cache_dir='./cache')
 
-params_list = list(parameter_grid())
-# random.shuffle(params_list)
+# %%
+seed_all(111)
 
+# %%
+len(dataset)
 
+# %%
+num_inputs = 5
 
+input_data = dataset.select(random.choices(range(len(dataset)), k=num_inputs))
+len(input_data)
 
+# %%
+input_data
 
-##############################################################################################################################################
-def translate_sentence(model_name, src_lang, tgt_lang, sentence):
-    """翻译单个句子"""
-    # 加载模型和tokenizer
-    lang_src = lang_map[src_lang]
-    lang_tgt = lang_map[tgt_lang]
-    tok, model = build_model(model_name, lang_src, lang_tgt)
-    
-    # 检查是否需要添加提示前缀（针对T5模型）
-    need_prompt = model_name.startswith('t5')
-    
-    # 预处理输入句子
-    if need_prompt:
-        # T5需要特定的翻译提示
-        if src_lang == 'en' and tgt_lang == 'zh':
-            input_text = f"Translate from English to Chinese: {sentence}"
-        elif src_lang == 'zh' and tgt_lang == 'en':
-            input_text = f"Translate from Chinese to English: {sentence}"
-        else:
-            input_text = f"Translate from {src_lang} to {tgt_lang}: {sentence}"
+# %%
+model, tok = train_model('opus-mt', src='zh', tgt='en', num_train=32, num_test=20)
+
+# %%
+model.device
+
+# %%
+def get_avail_device():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.mps.is_available():
+        device = torch.device("mps")
     else:
-        input_text = sentence
-    
-    # 编码输入
-    inputs = tok(input_text, return_tensors="pt", max_length=128, truncation=True)
-    
-    # 生成翻译
-    with torch.no_grad():
-        translated_tokens = model.generate(
-            inputs.input_ids,
-            attention_mask=inputs.attention_mask,
-            max_length=128,
-            num_beams=5,  # 使用beam search获得更好的结果
-            early_stopping=True
-        )
-    
-    # 解码输出
-    translated_text = tok.decode(translated_tokens[0], skip_special_tokens=True)
-    
-    return translated_text
+        device = torch.device("cpu")
+    return device
 
-def interactive_translation():
-    """交互式翻译模式"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='机器翻译测试')
-    parser.add_argument('--model', type=str, default='opus-mt', 
-                       choices=model_map.keys(), help='选择的模型')
-    parser.add_argument('--src', type=str, default='zh', help='源语言')
-    parser.add_argument('--tgt', type=str, default='en', help='目标语言')
-    parser.add_argument('--sentence', type=str, help='要翻译的句子')
-    
-    args = parser.parse_args()
-    
-    if args.sentence:
-        # 翻译命令行提供的句子
-        result = translate_sentence(args.model, args.src, args.tgt, args.sentence)
-        print(f"源文本: {args.sentence}")
-        print(f"翻译结果: {result}")
-    else:
-        # 交互式模式
-        print("=== 机器翻译交互模式 ===")
-        print(f"模型: {args.model}, 语言对: {args.src}-{args.tgt}")
-        print("输入 'quit' 或 'exit' 退出")
-        
-        while True:
-            try:
-                sentence = input("\n请输入要翻译的文本: ").strip()
-                if sentence.lower() in ['quit', 'exit', '退出']:
-                    break
-                if sentence:
-                    result = translate_sentence(args.model, args.src, args.tgt, sentence)
-                    print(f"翻译结果: {result}")
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                print(f"翻译出错: {e}")
+# %%
+import torch
+from tqdm.auto import tqdm
 
-# 在脚本末尾添加
-#if __name__ == "__main__":
-    # 如果您想直接运行翻译测试而不是训练，取消下面的注释
-    #interactive_translation()
-    
-    # 或者保持原有的训练流程
-    #pass
-interactive_translation()
-####################################################################################################################
+def translate(model, tok, input_data, src='zh'):
+    model.eval()
+    device = get_avail_device()
 
+    # 1. 生成参数（可按需调）
+    gen_kwargs = {
+        "max_length": 64,
+        "num_beams": 4,
+        "early_stopping": True,
+    }
 
+    out_f = []
 
+    for sample in tqdm(input_data, desc="Translating"):
+        zh = sample["translation"][src]
+        inputs = tok(zh, return_tensors="pt").to(device)
 
+        with torch.no_grad():
+            pred = model.generate(**inputs, **gen_kwargs)
+
+        hyp = tok.decode(pred[0], skip_special_tokens=True)
+        out_f.append(hyp.strip())
+
+    return out_f
 
 
 # %%
-for params in params_list:
-    clean_memory()
-    print(params)
-    try:
-        res = train_evaluate(**params)
-        print('OK', res)
-    except Exception as e:
-        print(f'Error processing {e}')
-        raise e
+tgt, src = 'en', 'zh'
+
+translation_results = {'tgt': [sample['translation'][tgt] for sample in input_data],
+                       'src': [sample['translation'][src] for sample in input_data]}
+
+for key in model_map:
+    model, tok = train_model(key, src='zh', tgt='en', num_train=32, num_test=20)
+    translation_results[key] = translate(model, tok, input_data, src)
+
+# %%
+df = pd.DataFrame(translation_results)
+df.to_csv('./translation_results.csv', index=False)
+
+
