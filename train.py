@@ -22,6 +22,7 @@ from transformers import (
     Seq2SeqTrainer,
     EarlyStoppingCallback,
     AutoModelForSeq2SeqLM,
+    GenerationConfig,
 )
 import torch
 import numpy as np
@@ -51,10 +52,10 @@ lang_map = {
         'tr': 'tr_TR',
     }
 model_map = {
-    'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
-    'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-#    'nllb': 'facebook/nllb-200-distilled-1.3B',
- #   't5-small': 'google-t5/t5-small',
+ #   'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
+  #  'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
+    # 'nllb': 'facebook/nllb-200-distilled-1.3B',
+    't5-small': 'google-t5/t5-small',
 }
 
 # %% [markdown]
@@ -192,6 +193,15 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
 
     data_coll = DataCollatorForSeq2Seq(tok, model=model)
 
+    generation_config = GenerationConfig(
+        max_length=max_tgt,
+        eos_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
+        decoder_start_token_id=tok.pad_token_id,
+        # 显式禁止输出 extra_id
+        suppress_tokens=[i for i in range(32128, 32228)]
+    )
+
     args = Seq2SeqTrainingArguments(
         # output_dir='/content/output',
         eval_strategy="steps",
@@ -211,6 +221,7 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         greater_is_better=True,
         report_to="none",
         fp16=True,
+        generation_config=generation_config,
     )
 
     trainer = Seq2SeqTrainer(
