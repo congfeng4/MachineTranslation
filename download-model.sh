@@ -1,0 +1,1 @@
+./hfd.sh facebook/nllb-200-distilled-600M --local-dir ./cache --tool wget 

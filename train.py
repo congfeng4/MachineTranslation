@@ -31,13 +31,29 @@ import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
 import jsonlines
+from joblib import delayed, Parallel
 
 dotenv.load_dotenv('.env')
 
 # %% [markdown]
 # ## Load Dataset WMT17
 # 
-# Device space limitation.
+# | Field                                   | Value                                                                                            |
+# | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+# | Release year                            | 2017                                                                                             |
+# | Language pair                           | Chinese ↔ English (zh-en)                                                                        |
+# | Parallel sentences – Train              | 25 136 609                                                                                       |
+# | Parallel sentences – Dev (valid)        | 2 002                                                                                            |
+# | Parallel sentences – Test (newstest-17) | 2 001                                                                                            |
+# | Approx. download size                   | 884 MiB                                                                                          |
+# | De-compressed size                      | 6.4 GiB                                                                                          |
+# | Main sources                            | UN Parallel Corpus v1.0, News Commentary v12, CWMT corpus, WikiTitles, etc.                      |
+# | Domain                                  | News + mixed web crawl                                                                           |
+# | Tokenisation                            | raw text + SGML/TXT parallel files; no forced segmentation provided                              |
+# | Evaluation metric reported              | BLEU (baseline ≈ 17–18 on test set)                                                              |
+# | Hosted links                            | [TFDS catalog](https://www.tensorflow.org/datasets/catalog/wmt17_translate#wmt17_translatezh-en) |
+# | HF compatibility                        | load via `datasets.load_dataset("wmt17", "zh-en")`                                               |
+# 
 
 # %%
 SUPPORTED_LANGS = ['zh-en'] #'cs-en', 'de-en', 'fi-en', 'lv-en', 'ru-en', 'tr-en', ]
@@ -52,11 +68,14 @@ lang_map = {
         'tr': 'tr_TR',
     }
 model_map = {
- #   'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
-  #  'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-    # 'nllb': 'facebook/nllb-200-distilled-1.3B',
-    't5-small': 'google-t5/t5-small',
+    # 'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
+    # 'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
+    'nllb': 'facebook/nllb-200-distilled-600M',
 }
+
+# %%
+data = load_dataset("wmt17", name='zh-en', split="train", cache_dir='./cache')
+
 
 # %% [markdown]
 # ## Load Pretrained Model.
@@ -107,8 +126,8 @@ def seed_all(seed: int = 42):
 # %%
 from evaluate import load
 
-bleu = load("sacrebleu", cache_dir='./cache')
-chrf = load("chrf", cache_dir='./cache')
+bleu = load("sacrebleu", cache_dir='./cache')  # Word-level similarity
+chrf = load("chrf", cache_dir='./cache')  # Character-level similarity
 
 
 # %% [markdown]
@@ -136,15 +155,16 @@ def flip_dataset(raw, src, tgt):
 def clean_memory():
     import torch, gc
     if torch.cuda.is_available():
-        torch.cuda.empty_cache()  # 把未用缓存还给 CUDA
+        torch.cuda.empty_cache()
     elif torch.backends.mps.is_available():
-        torch.mps.empty_cache()   # 把未用缓存还给 CUDA
-    gc.collect()               # 再让 Python 回收一次
+        torch.mps.empty_cache()
+    gc.collect()
 
 # %%
 def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10, num_test=10, num_val=10):
+    seed_all(seed=seed)
     need_prompt = model_name.startswith('t5')
-    data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
+    # data = load_dataset("wmt17", name="-".join([src, tgt]), split="train", cache_dir='./cache')
 
     lang_src = lang_map[src]
     lang_tgt = lang_map[tgt]
@@ -152,6 +172,7 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
 
     num_train_epochs = 10
     max_src, max_tgt = 128, 128
+    batch_size = 64
 
     def compute_metrics(eval_preds):
         preds, labels = eval_preds
@@ -208,9 +229,9 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         eval_steps=500,
         logging_steps=100,
         save_steps=500,
-        per_device_train_batch_size=64,
-        per_device_eval_batch_size=64,
-        gradient_accumulation_steps=64,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        gradient_accumulation_steps=batch_size,
         learning_rate=3e-5,
         num_train_epochs=num_train_epochs,
         predict_with_generate=True,
@@ -246,6 +267,105 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
 
 
 
+# %%
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainingArguments, Seq2SeqTrainer, DataCollatorForSeq2Seq
+import numpy as np
+import evaluate
+
+def train_evaluate(model_name: str, src: str, tgt: str, seed, num_train=32, num_test=20, num_val=20):
+    
+    # --- 1. Setup Model & Tokenizer ---
+    # Ensure you are using the correct NLLB codes
+    src_code = "zho_Hans" 
+    tgt_code = "eng_Latn" 
+    model_url = model_map[model_name]
+    tokenizer = AutoTokenizer.from_pretrained(model_url, src_lang=src_code, tgt_lang=tgt_code, cache_dir='./cache')
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_url, cache_dir='./cache')
+
+    # --- 2. Fix Configuration for Training ---
+    # Convert target code to ID
+    target_lang_id = tokenizer.convert_tokens_to_ids(tgt_code)
+    
+    # This tells the model: "During training, start decoding with this token"
+    model.config.decoder_start_token_id = target_lang_id
+    
+    # Optional: Fix forced_bos_token_id in config so it persists for inference
+    model.config.forced_bos_token_id = target_lang_id
+
+    # --- 3. Prepare Data (Using Corrected Encode) ---
+    def encode(ex):
+        # ... (Insert the corrected encode function from above) ...
+        # For this snippet, assuming simpler inputs:
+        inputs = [x[src] for x in ex["translation"]]
+        targets = [x[tgt] for x in ex["translation"]]
+        
+        tokenizer.src_lang = src_code
+        model_inputs = tokenizer(inputs, max_length=128, truncation=True)
+
+        tokenizer.src_lang = tgt_code
+        with tokenizer.as_target_tokenizer():
+            labels = tokenizer(targets, max_length=128, truncation=True)
+            
+        model_inputs["labels"] = labels["input_ids"]
+        return model_inputs
+
+    raw_train, raw_test, raw_val = split_train_test(data,
+                                                    num_trains=num_train, num_test=num_test, num_val=num_val)
+    # Why we tokenize the split instead of data? Since data is very large, and we only use a small part of it!!
+    # So 3 times tokenizations is OK.
+    tokenised_train = raw_train.map(encode, batched=True)
+    tokenised_val = raw_val.map(encode, batched=True)
+    tokenised_test = raw_test.map(encode, batched=True)
+
+    data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
+
+    # --- 4. Training Arguments ---
+    args = Seq2SeqTrainingArguments(
+        learning_rate=2e-5,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        num_train_epochs=10,
+        weight_decay=0.01,
+        save_total_limit=2,
+        predict_with_generate=True,
+        fp16=True,
+        logging_steps=10,
+        eval_strategy="no", # or "steps" if you have eval data
+        # REMOVE generation_config here. Rely on model.config.
+    )
+
+    # 2. **CRITICAL STEP**: Specify the target language ID
+    def compute_metrics(eval_preds):
+        preds, labels = eval_preds
+        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+        pred_str = tokenizer.batch_decode(preds, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
+        bleu_score  = bleu.compute(predictions=pred_str,
+                                    references=[[r] for r in label_str])["score"]
+        chrf_score  = chrf.compute(predictions=pred_str,
+                                    references=label_str)["score"]
+        print('preds', pred_str)
+        return {"bleu": bleu_score, "chrf": chrf_score}
+    
+    trainer = Seq2SeqTrainer(
+        model=model,
+        args=args,
+        train_dataset=tokenised_train, # Replace with your dataset
+        eval_dataset=tokenised_val,
+        tokenizer=tokenizer,
+        compute_metrics=compute_metrics,
+        data_collator=data_collator,
+    )
+
+    trainer.train()
+    eval_result = trainer.evaluate(tokenised_test)
+    eval_result.update(src=src, tgt=tgt, num_train=num_train, num_test=num_test, num_val=num_val, model_name=model_name)
+
+    writer = jsonlines.open('wmt17_results.jsonl', mode='a')
+    writer.write(eval_result)
+    writer.close()
+    return eval_result
+
 # %% [markdown]
 # ## Run Experiments
 
@@ -262,8 +382,7 @@ def parameter_grid():
                                 num_train=num_train, num_test=num_test, num_val=num_val)
 
 params_list = list(parameter_grid())
-random.shuffle(params_list)
-
+# random.shuffle(params_list)
 
 # %%
 for params in params_list:
@@ -275,6 +394,7 @@ for params in params_list:
     except Exception as e:
         print(f'Error processing {e}')
         raise e
+
 
 
 

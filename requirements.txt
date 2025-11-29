@@ -12,3 +12,5 @@ jsonlines
 sacremoses
 ipywidgets
 protobuf
+scikit-learn
+umap-learn
