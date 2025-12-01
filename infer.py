@@ -108,20 +108,11 @@ def split_train_test(full_train, num_trains, num_test, num_val):
     return raw_train, raw_test, raw_val
 
 
-# %%
-def clean_memory():
-    import torch, gc
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()  # 把未用缓存还给 CUDA
-    elif torch.backends.mps.is_available():
-        torch.mps.empty_cache()   # 把未用缓存还给 CUDA
-    gc.collect()               # 再让 Python 回收一次
-
 # %% [markdown]
 # ## Run Inference
 
 # %%
-dataset = load_dataset('wmt17', 'zh-en', split='test', cache_dir='./cache')
+dataset = load_dataset('wmt17', 'zh-en', split='train', cache_dir='./cache')
 
 # %%
 seed_all(111) # Set a seed to 111.
