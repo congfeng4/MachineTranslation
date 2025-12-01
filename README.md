@@ -24,7 +24,6 @@ The main dependencies include:
 - `train.py`: Script for training and evaluating models with different parameters
 - `infer.py`: Script for running inference on trained models and generating translations
 - `requirements.txt`: List of required Python packages
-- `.gitignore`: Files and directories to be ignored by Git
 
 ## Supported Models
 
@@ -34,10 +33,8 @@ The project supports the following pre-trained models:
 |-----------|-------------------------------------------|------------|---------------------------|
 | mbart     | facebook/mbart-large-50-many-to-many-mmt  | 610M       | Transformer-large (12-12) |
 | opus-mt   | Helsinki-NLP/opus-mt-zh-en                | 74M        | Transformer-base (6-6)    |
-| nllb      | facebook/nllb-200-distilled-1.3B          | 1.3B       | Transformer (12-12, MoE)  |
-| t5-small  | google-t5/t5-small                        | 60M        | Encoder-decoder (6-6)     |
+| nllb      | facebook/nllb-200-distilled-600M          | 600M       | Transformer (12-12, MoE)  |
 
-*Note: nllb and t5-small are currently commented out in `train.py` but available in `infer.py`*
 
 ## Training
 

@@ -38,17 +38,15 @@ lang_map = {
         'tr': 'tr_TR',
     }
 model_map = {
-    # 'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
-    # 'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-    # 'nllb': 'facebook/nllb-200-distilled-1.3B',
-    't5-small': 'google-t5/t5-small',
+    'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
+    'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
+    'nllb': 'facebook/nllb-200-distilled-600M',
 }
 # Set the best model parameters here!
 model_params = {
     'mbart': {'num_train': 2048},
     'opus-mt': {'num_train': 2048},
     'nllb': {'num_train': 2048},
-    't5-small': {'num_train': 2048},
 }
 
 # %% [markdown]
@@ -58,9 +56,8 @@ model_params = {
 # | --------- | ---------------------------------------- | -------- | ------------------------- | --------------------- | --------------------- | ------------------- | -------------------------- | ------------ |
 # | mbart     | facebook/mbart-large-50-many-to-many-mmt | 610 M    | Transformer-large (12-12) | 50 langs, any→any     | CC25 + mined data     | SentencePiece 250 k | No (src/tgt codes in call) | ~2.3 GB      |
 # | opus-mt   | Helsinki-NLP/opus-mt-zh-en               | 74 M     | Transformer-base (6-6)    | zh → en only          | OPUS corpus           | SentencePiece 32 k  | No                         | ~298 MB      |
-# | nllb      | facebook/nllb-200-distilled-1.3B         | 1.3 B    | Transformer (12-12, MoE)  | 200 langs, any→any    | NLLB-200 corpus       | SentencePiece 256 k | No                         | ~5 GB        |
-# | t5-small  | google-t5/t5-small                       | 60 M     | Encoder-decoder (6-6)     | any pair in pre-train | C4 + downstream tasks | SentencePiece 32 k  | **Yes ("translate X to Y:")** | ~242 MB      |
-# 
+# | nllb      | facebook/nllb-200-distilled-600M         | 1.3 B    | Transformer (12-12, MoE)  | 200 langs, any→any    | NLLB-200 corpus       | SentencePiece 256 k | No                         | ~5 GB        |
+#
 
 # %%
 def build_model(model_name, src_lang, tgt_lang):
@@ -348,8 +345,7 @@ import seaborn as sns
 model_map = {
     'mbart': 'facebook/mbart-large-50-many-to-many-mmt',
     'opus-mt': 'Helsinki-NLP/opus-mt-zh-en',
-    'nllb': 'facebook/nllb-200-distilled-1.3B',
-    't5-small': 'google-t5/t5-small',
+    'nllb': 'facebook/nllb-200-distilled-600M',
 }
 
 # 假设你的 DataFrame 长这样：
