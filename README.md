@@ -96,16 +96,22 @@ Or interactively, run `train.ipynb`
 
 The training process:
 1. Loads the WMT17 dataset for Chinese-English translation.
-2. Samples the dataset and splits the subset into training, validation, and test sets.
-3. Tokenizes the data using the model's tokenizer.
-4. Trains the model using the Seq2SeqTrainer from Hugging Face Transformers.
-5. Evaluates model performance using BLEU and chrF metrics.
-6. Saves evaluation results to `wmt17_results.jsonl`.
+2. Sample a subset from WMT17 (zh-en) train split.
+3. Splits the dataset subset into training, validation, and test sets.
+4. Tokenizes the data using the model's tokenizer
+5. Loads the pretrained models' weights from Hugging Face.
+6. Finetunes the pretrained models using the Seq2SeqTrainer from Hugging Face.
+7. Evaluates model performance using BLEU and chrF metrics.
+8. Saves evaluation results to `wmt17_results.jsonl`.
 
-The training parameters can be modified in the `parameter_grid()` function, including:
+
+The training parameters include:
 - Number of training examples (16, 32, 64, 128, 256, 512, 1024, 2048)
+
+
+The testing setup include:
 - Number of test examples (20, 200)
-- Random seeds (111, 112, 113)
+
 
 ## Inference
 

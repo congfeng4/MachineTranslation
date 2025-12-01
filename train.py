@@ -1,5 +1,8 @@
 # %% [markdown]
-# # # Machine Translation - Training
+# # Machine Translation - Training
+# 
+# We finetune three different machine translation models, including multi-linguistic and mono-linguistic models on subsets of the WMT17 dataset (zh-en)
+# to inspect the capacities of these models on transferring to a mono-linguistic task (zh-en).
 
 # %%
 import os, json, math, time
@@ -47,7 +50,6 @@ dotenv.load_dotenv('.env')
 # 
 
 # %%
-SUPPORTED_LANGS = ['zh-en'] #'cs-en', 'de-en', 'fi-en', 'lv-en', 'ru-en', 'tr-en', ]
 lang_map = {
         'en': 'en_XX',
         'zh': 'zh_CN',
@@ -181,13 +183,12 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         en_sent = [item[src] for item in ex["translation"]]
         zh_sent = [item[tgt] for item in ex["translation"]]
 
-        # 一次调用同时编码源端和目标端
         model_inputs = tok(
             en_sent,
             text_target=zh_sent,
             max_length=max_src,
             truncation=True,
-            padding=False,          # 动态 padding，由 data_collator 完成
+            padding=False,
         )
         return model_inputs
 
@@ -207,7 +208,6 @@ def train_evaluate(model_name: str, src: str, tgt: str, seed: int, num_train=10,
         eos_token_id=tok.eos_token_id,
         pad_token_id=tok.pad_token_id,
         decoder_start_token_id=tok.pad_token_id,
-        # 显式禁止输出 extra_id
         suppress_tokens=[i for i in range(32128, 32228)]
     )
 
