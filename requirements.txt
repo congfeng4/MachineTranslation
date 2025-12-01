@@ -9,7 +9,6 @@ pandas
 matplotlib 
 dotenv 
 jsonlines 
-sacremoses
 ipywidgets
 protobuf
 scikit-learn
