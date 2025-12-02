@@ -208,13 +208,12 @@ def train_model(model_name: str, src: str, tgt: str, num_train=10, num_test=10, 
             # T5 is the google model that needs a prompt.
             zh_sent = ["translate Chinese to English:" + item for item in zh_sent]
 
-        # 一次调用同时编码源端和目标端
         model_inputs = tok(
             en_sent,
             text_target=zh_sent,
             max_length=max_src,
             truncation=True,
-            padding=False,          # 动态 padding，由 data_collator 完成
+            padding=False,
         )
         return model_inputs
 
